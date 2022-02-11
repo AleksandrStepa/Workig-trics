@@ -1,0 +1,3 @@
+(ZN(SUM([Num Users])) - LOOKUP(ZN(SUM([Num Users])), FIRST())) / ABS(LOOKUP(ZN(SUM([Num Users])), FIRST()))
+1-(RUNNING_SUM([num_users_in_room])-[num_users_in_room])/ TOTAL([num_users_in_room])
+
