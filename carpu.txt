@@ -1,0 +1,99 @@
+WITH join_test AS(
+    SELECT DISTINCT 
+        user_id,
+        ab_test,
+        num_ab_test
+    FROM `marketing-analytics-235713.aggregated_events_hd.user_level_lvl_start_finish`
+    LEFT JOIN (
+        SELECT 
+            user_id,
+            COUNT(DISTINCT ab_test) num_ab_test
+        FROM `marketing-analytics-235713.aggregated_events_hd.user_level_lvl_start_finish`
+        WHERE event_date >= "2022-01-26"
+        AND lvl_nm<=50
+        AND install_source IN ('com.android.vending', 'iTunes')
+        AND event_name='level_start'
+        GROUP BY user_id
+        ) USING (user_id)
+    WHERE event_date >= "2022-01-26"
+    AND lvl_nm<=50
+    AND install_source IN ('com.android.vending', 'iTunes')
+    AND event_name='level_start'
+    AND num_ab_test=1
+),
+-- определение группы АБ теста каждой инсталяции
+install_with_ab_test AS(
+    SELECT DISTINCT
+        i.user_id,
+        i.install_date,
+        i.network,
+        i.platform,
+        day,
+        j.ab_test,
+        i.country
+    FROM `marketing-analytics-235713.aggregated_events_hd.user_level_installs` i
+    LEFT JOIN join_test j
+    ON i.user_id = j.user_id
+    --для создания записей с днями жизни каждой установки
+    CROSS JOIN UNNEST(GENERATE_ARRAY(0, DATE_DIFF(CURRENT_DATE(), DATE("2022-01-26"), DAY))) AS day
+    WHERE install_date >= "2022-01-26"
+    -- убраны даты, которые игроки еще не успели прожить
+    AND DATE_ADD(install_date, INTERVAL day DAY) <= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+),
+-- определение суммы покупок по дням
+purchase AS(
+    SELECT DISTINCT
+        p.user_id,
+        p.install_date,
+        p.day,
+        p.purchase_in_usd,
+        p.lvl_nm
+    FROM(
+        SELECT 
+            user_id,
+            install_date,
+            DATE_DIFF(event_date, install_date, DAY) day,
+            SUM(purchase_in_usd) purchase_in_usd,
+            MAX(lvl_nm) lvl_nm
+        FROM `marketing-analytics-235713.aggregated_events_hd.user_level_fb_purchases`
+        GROUP BY user_id, install_date, day
+    ) p
+    WHERE p.install_date >= "2022-01-26"
+),
+result AS(
+    SELECT DISTINCT
+        user_id,
+        install_date,
+        DATE_ADD(install_date, INTERVAL day DAY) event_date,
+        day,
+        lvl_nm,
+        purchase_in_usd,
+        ab_test,
+        CASE 
+            WHEN country IN ('Canada', 'United Kingdom', 'Switzerland', 'Sweden', 'Norway',
+            'New Zealand', 'Australia', 'Netherlands', 'Luxembourg', 'Ireland', 'Germany',
+            'France', 'Finland', 'Denmark', 'Belgium', 'Austria', 'Spain', 'Italy', 'Japan',
+            'South Korea', 'Taiwan') THEN 'Tier 1 wo US'
+            WHEN country = 'United States' THEN 'US'
+            ELSE 'Other'
+        END country,
+        network,
+        platform
+    FROM install_with_ab_test
+    LEFT JOIN purchase USING(user_id, install_date, day)
+    WHERE ab_test IN ('NewLevelDynamic200/AbGroup', 'NewLevelDynamic200/AbGroup2')
+)
+SELECT
+    user_id,
+    install_date,
+    event_date,
+    day,
+    lvl_nm,
+    IFNULL(purchase_in_usd, 0) purchase_in_usd,
+    SUM(IFNULL(purchase_in_usd, 0)) OVER(PARTITION BY user_id ORDER BY day ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) alt_cumulative_purchase,
+    SUM(IFNULL(purchase_in_usd, 0)) OVER(PARTITION BY user_id ORDER BY day) cumulative_purchase,
+    ab_test,
+    country,
+    network,
+    platform
+FROM result

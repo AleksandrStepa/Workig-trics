@@ -1,0 +1,60 @@
+WITH join_test AS(
+    SELECT DISTINCT 
+        user_id,
+        ab_test,
+        num_ab_test
+    FROM `marketing-analytics-235713.aggregated_events_hd.user_level_lvl_start_finish`
+    LEFT JOIN (
+        SELECT 
+            user_id,
+            COUNT(DISTINCT ab_test) num_ab_test
+        FROM `marketing-analytics-235713.aggregated_events_hd.user_level_lvl_start_finish`
+        WHERE event_date >= "2022-01-26"
+        AND lvl_nm<=50
+        AND install_source IN ('com.android.vending', 'iTunes')
+        AND event_name='level_start'
+        GROUP BY user_id
+    ) USING (user_id)
+    WHERE event_date >= "2022-01-26"
+    AND lvl_nm<=50
+    AND install_source IN ('com.android.vending', 'iTunes')
+    AND event_name='level_start'
+    AND num_ab_test=1
+),
+installs AS(
+    SELECT DISTINCT
+        user_id,
+        install_date,
+        day,
+        CASE 
+            WHEN country IN ('Canada', 'United Kingdom', 'Switzerland', 'Sweden', 'Norway',
+            'New Zealand', 'Australia', 'Netherlands', 'Luxembourg', 'Ireland', 'Germany',
+            'France', 'Finland', 'Denmark', 'Belgium', 'Austria', 'Spain', 'Italy', 'Japan',
+            'South Korea', 'Taiwan') THEN 'Tier 1 wo US'
+            WHEN country = 'United States' THEN 'US'
+            ELSE 'Other'
+        END country
+    FROM `marketing-analytics-235713.aggregated_events_hd.user_level_installs`
+    CROSS JOIN unnest(generate_array(1, 30)) AS day
+    WHERE DATE_ADD(install_date, INTERVAL day DAY) <= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+    AND install_date >= "2022-01-26"
+)
+SELECT
+    i.user_id,
+    i.install_date,
+    DATE_ADD(i.install_date, INTERVAL day DAY) event_date,
+    i.day,
+    IFNULL(r.retention, 0) retention,
+    i.country,
+    j.ab_test
+FROM installs i
+LEFT JOIN join_test j USING(user_id)
+LEFT JOIN(
+    SELECT DISTINCT
+        user_id,
+        install_date,
+        day,
+        1 retention
+    FROM `marketing-analytics-235713.aggregated_events_hd.user_level_day_info`
+    ) r USING(user_id, install_date, day)
+WHERE j.ab_test IN ('NewLevelDynamic200/AbGroup', 'NewLevelDynamic200/AbGroup2')

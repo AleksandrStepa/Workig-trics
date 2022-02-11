@@ -1,0 +1,228 @@
+WITH join_test AS(
+SELECT DISTINCT 
+    user_id,
+    ab_test,
+    num_ab_test
+FROM `marketing-analytics-235713.aggregated_events_hd.user_level_lvl_start_finish`
+LEFT JOIN (
+SELECT 
+    user_id,
+    COUNT(DISTINCT ab_test) num_ab_test
+FROM `marketing-analytics-235713.aggregated_events_hd.user_level_lvl_start_finish`
+WHERE event_date >= "2022-01-26"
+AND lvl_nm<=49
+AND install_source IN ('com.android.vending', 'iTunes')
+AND event_name='level_start'
+GROUP BY user_id
+) USING (user_id)
+WHERE event_date >= "2022-01-26"
+AND lvl_nm<=49
+AND install_source IN ('com.android.vending', 'iTunes')
+AND event_name='level_start'
+AND num_ab_test=1
+),
+payers AS(
+    SELECT DISTINCT 
+        user_id,
+        'payer' payer_flag
+    FROM `marketing-analytics-235713.aggregated_events_hd.user_level_fb_purchases`
+    WHERE event_date >= "2022-01-26"
+    AND install_date >= "2022-01-26" 
+),
+balance AS(
+SELECT
+    gvc.user_pseudo_id user_id,
+    DATE(gvc.first_open_timestamp) install_date,
+    DATE_DIFF(gvc.event_date, DATE(gvc.first_open_timestamp), DAY) day_after_install,
+    gvc.country,
+    gvc.platform,
+    gvc.install_source network,
+    gvc.lvl_nm,
+    CASE 
+        WHEN gvc.lvl_nm < 50 THEN '30-50'
+        WHEN gvc.lvl_nm >= 50 AND gvc.lvl_nm < 100 THEN '50-100'
+        WHEN gvc.lvl_nm >= 100 AND gvc.lvl_nm < 150 THEN '100-150'
+        WHEN gvc.lvl_nm >= 150 AND gvc.lvl_nm < 200 THEN '150-200'
+        WHEN gvc.lvl_nm >= 200 AND gvc.lvl_nm < 250 THEN '200-250'
+        WHEN gvc.lvl_nm >= 250 AND gvc.lvl_nm < 300 THEN '250-300'
+        ELSE '>300'
+    END lvl_bin,
+    gvc.event_date,
+    gvc.event_timestamp,
+    -- бесплатные награды
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b1') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b1') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b1') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b1') AS int64)
+        ELSE 0
+    END free_firecracker,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b2') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b2') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b2') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b2') AS int64)
+        ELSE 0
+    END free_bomb,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b3') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b3') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b3') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b3') AS int64)
+        ELSE 0
+    END free_cube,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b4') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b4') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b4') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b4') AS int64)
+        ELSE 0
+    END free_trowel,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b5') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b5') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b5') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b5') AS int64)
+        ELSE 0
+    END free_roller,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b6') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b6') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b6') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b6') AS int64)
+        ELSE 0
+    END free_hammer,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b7') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b7') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b7') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b7') AS int64)
+        ELSE 0
+    END free_firecracker_bomb,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b8') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b8') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b8') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b8') AS int64)
+        ELSE 0
+    END free_extra_target_booster,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b9') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.b9') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b9') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.b9') AS int64)
+        ELSE 0
+    END free_rocket,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.hard_currency') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.hard_currency') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.hard_currency') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.hard_currency') AS int64)
+        ELSE 0
+    END free_hard_currency,
+    CASE
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.hard_currency') AS int64) > 0
+        THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.hard_currency') AS int64)
+        ELSE 0
+    END free_hard_currency_receive,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.moves') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.moves') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.moves') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.moves') AS int64)
+        ELSE 0
+    END free_moves,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.infinity_lives') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.infinity_lives') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.infinity_lives') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.infinity_lives') AS int64)
+        ELSE 0
+    END free_infinity_lives,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.free_values_spend,'$.glove') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_spend,'$.glove') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.free_values_receive,'$.glove') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.free_values_receive,'$.glove') AS int64)
+        ELSE 0
+    END free_glove,
+    -- платные награды 
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b1') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b1') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b1') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b1') AS int64)
+        ELSE 0
+    END paid_firecracker,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b2') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b2') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b2') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b2') AS int64)
+        ELSE 0
+    END paid_bomb,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b3') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b3') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b3') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b3') AS int64)
+        ELSE 0
+    END paid_cube,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b4') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b4') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b4') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b4') AS int64)
+        ELSE 0
+    END paid_trowel,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b5') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b5') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b5') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b5') AS int64)
+        ELSE 0
+    END paid_roller,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b6') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b6') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b6') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b6') AS int64)
+        ELSE 0
+    END paid_hammer,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b7') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b7') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b7') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b7') AS int64)
+        ELSE 0
+    END paid_firecracker_bomb,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b8') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b8') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b8') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b8') AS int64)
+        ELSE 0
+    END paid_extra_target_booster,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b9') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.b9') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b9') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.b9') AS int64)
+        ELSE 0
+    END paid_rocket,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.hard_currency') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.hard_currency') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.hard_currency') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.hard_currency') AS int64)
+        ELSE 0
+    END paid_hard_currency,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.moves') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.moves') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.moves') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.moves') AS int64)
+        ELSE 0
+    END paid_moves,
+    CASE 
+        WHEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.infinity_lives') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_spend,'$.infinity_lives') AS int64) * (-1)
+        WHEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.infinity_lives') AS int64) > 0 THEN CAST(json_EXTRACT(gvc.paid_values_receive,'$.infinity_lives') AS int64)
+        ELSE 0
+    END paid_infinity_lives,
+    gvc.hard_balance,
+    gvc.game_values_event,
+    jt.ab_test,
+    IFNULL(p.payer_flag, 'not_payer') payer_flag
+FROM `marketing-analytics-235713.aggregated_events_hd.user_level_logs` gvc
+INNER JOIN join_test jt
+ON gvc.user_pseudo_id = jt.user_id
+LEFT JOIN payers p USING (user_id)
+WHERE event_date  >= "2022-01-26"
+AND DATE(gvc.first_open_timestamp) >= "2022-01-26"
+AND event_name = 'game_values_change'
+AND install_source IN ('com.android.vending', 'iTunes')
+AND jt.ab_test IN ('NewLevelDynamic200/AbGroup', 'NewLevelDynamic200/AbGroup2')
+)
+SELECT
+    user_id,
+    install_date,
+    day_after_install,
+    CASE 
+            WHEN country IN ('Canada', 'United Kingdom', 'Switzerland', 'Sweden', 'Norway',
+            'New Zealand', 'Australia', 'Netherlands', 'Luxembourg', 'Ireland', 'Germany',
+            'France', 'Finland', 'Denmark', 'Belgium', 'Austria', 'Spain', 'Italy', 'Japan',
+            'South Korea', 'Taiwan') THEN 'Tier 1 wo US'
+            WHEN country = 'United States' THEN 'US'
+            ELSE 'Other'
+        END country,
+    platform,
+    network,
+    lvl_nm,
+    lvl_bin,
+    event_date,
+    event_timestamp,
+    hard_balance,
+    free_hard_currency_receive,
+    ab_test,
+    payer_flag,
+    SUM(free_cube) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_cube,
+    SUM(free_firecracker_bomb) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_firecracker_bomb,
+    SUM(free_extra_target_booster) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_extra_target_booster,
+    SUM(free_glove) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_glove,
+    SUM(free_trowel) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_trowel,
+    SUM(free_roller) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_roller,
+    SUM(free_hammer) OVER(PARTITION BY user_id ORDER BY event_timestamp) free_hammer,
+    game_values_event
+FROM balance
